@@ -8,6 +8,9 @@ import requests
 from bs4 import BeautifulSoup
 from dateutil import parser as dateutil_parser
 
+from colorama import init as colorama_init
+from colorama import Fore, Back, Style
+
 logging.basicConfig(encoding='utf-8', level=logging.DEBUG)
 
 HIDE_PWD = True
@@ -41,10 +44,11 @@ def log_cookies(session):
     for cookie in session.cookies:
         logging.debug(f" [{cookie.name}]: `{cookie.value}`")
 
-def show_topic(topic_dict):
+def show_topic(args, topic_dict):
     d = topic_dict
     print(f"# {d['Suggestion ID']:<7} ({d['pythonized_creation_date']}) [{d['Status code']}]"
-          f" Votes: {d['Votes']} '{d['Title']}' by {d['Name']}  ")
+          f" Votes: {d['Votes']} '{Style.BRIGHT}{d['Title']}{Style.RESET_ALL}' by {d['Name']}"
+          f" {Fore.BLUE}({args.app_url}suggestions/{d['Suggestion ID']}){Style.RESET_ALL}")
 
 def read_csv(args, first_row_is_header=True, newline_limit=40):
     with open(args.csv) as csvfile:
@@ -190,12 +194,14 @@ def delete_with_dashboard(args, session, topic_ids):
     resp = make_request_or_stop(session, get_dashboard_url(args), method="POST", data=form_data)
 
 if __name__ == '__main__':
+    colorama_init()
 
     parser = argparse.ArgumentParser()
     parser.add_argument("-l", "--login", help='login (email)')
     parser.add_argument("-p", "--password", help='password')
     parser.add_argument("-b", "--board", default=7251, help='board id')
     parser.add_argument("--url", default="https://app.featureupvote.com/", help='base upvote url')
+    parser.add_argument("--app_url", default="https://timberborn.featureupvote.com/", help="individual url for app")
     parser.add_argument("--csv",
                         action='store_const',
                         # nargs="*",
@@ -218,6 +224,11 @@ if __name__ == '__main__':
     args = parser.parse_args()
     logging.debug(f"{args=}")
 
+    if args.password and args.login:
+        session = auth(args)
+    else:
+        session = None
+
     if args.csv:
         topics = read_csv(args)
         preprocess_topic_dicts(topics)
@@ -231,13 +242,16 @@ if __name__ == '__main__':
 
         filtered_ids = []
         for topic in filtered_topics:
-            show_topic(topic)
+            show_topic(args, topic)
             filtered_ids.append(topic["Suggestion ID"])
         print(f"Selected ids: {filtered_ids}")
 
-    if args.password and args.login:
-        session = auth(args)
-    # delete_with_dashboard(args, session, ["220203", "220087"])
+        if session:
+            ans = input("Delete selected ids? (Y/N 1/0)\n> ").upper()
+            if ans in ('Y', '1'):
+                delete_with_dashboard(args, session, filtered_ids)
 
+        else:
+            logging.info("Provide login and password to proceed with deletion")
 
     logging.info("Finished")
